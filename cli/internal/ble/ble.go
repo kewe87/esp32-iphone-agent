@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -94,7 +95,11 @@ func (b *BLE) Scan(ctx context.Context, d time.Duration) ([]Found, error) {
 	defer mu.Unlock()
 	var out []Found
 	for _, s := range all {
-		if s.cli {
+		// A board advertises the cli service UUID. On Windows/WinRT the 128-bit service UUID is
+		// frequently dropped from scan results (issue #114: the OS shows the name but devices[] is
+		// empty), so there also treat any named advertiser as a candidate. Connect() re-discovers the
+		// cli service and rejects anything that is not a board, so a false positive here is harmless.
+		if s.cli || (runtime.GOOS == "windows" && s.f.Name != "") {
 			if s.f.Name == "" {
 				s.f.Name = "ESP32 Agent"
 			}

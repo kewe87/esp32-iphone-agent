@@ -222,6 +222,13 @@ func (s *Server) io(ctx context.Context, c *Conn, req Request) Response {
 				return err
 			}
 		}
+		need := 2
+		if req.Cmd == "swipe" {
+			need = 4
+		}
+		if len(req.Pts) < need {
+			return fmt.Errorf("%s needs %d coordinates, got %d", req.Cmd, need, len(req.Pts))
+		}
 		pt := func(i int) (float64, float64) { return req.Pts[i] / w, req.Pts[i+1] / h }
 		switch req.Cmd {
 		case "tap":

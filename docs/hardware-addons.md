@@ -1,11 +1,12 @@
 # Optional hardware add-ons
 
-All off by default; each needs the part physically wired. The firmware support is built in — enable
-it with a build flag. Needs on-hardware validation.
+Off by default; each needs the part physically wired. The firmware support is built in — enable
+it with a build flag. Needs on-hardware validation. (The stop button and single-client hotspot need no
+parts and are on by default; see [hardening.md](hardening.md).)
 
 ## Status OLED (128×64 SSD1306, I2C) — `--display`
 A ~2 € 0.96" SSD1306 OLED shows board name + firmware, net mode + IP, peer/BLE count, and
-**RUNNING / STOPPED** (ties into the `--safety` stop button).
+**RUNNING / STOPPED** (ties into the BOOT stop button).
 
 Wiring (XIAO ESP32-S3 default I2C pins):
 

@@ -121,7 +121,7 @@ const long HOLD_MAX_MS = 60000;
 // type nothing), and an LED shows it: 0.5 Hz heartbeat = running, solid = stopped. Off by default so the
 // stock image is unchanged; pins are overridable for non-XIAO boards. Needs on-hardware validation.
 #ifndef SAFETY_CONTROLS
-#define SAFETY_CONTROLS 0
+#define SAFETY_CONTROLS 1  // fork default: on (flash --no-safety builds without it)
 #endif
 #if SAFETY_CONTROLS
 #ifndef STOP_BTN_PIN

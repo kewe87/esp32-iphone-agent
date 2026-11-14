@@ -13,10 +13,10 @@ All upstream copyright and the LICENSE are kept, as required by the MIT License 
 | **Daemon panic guard** (malformed `io` request crashed the whole daemon) | `cli/internal/daemon/ops.go`, `server.go` | `go build` + `go vet` clean |
 | **Decoder.err data race** fix | `cli/internal/video/decoder.go` | clean |
 | **Empty-line panic guard** | `cli/internal/daemon/conn.go` | clean |
-| **Optional stop button + status LED** (`--safety`, default off) | `hardware/hid_bridge/hid_bridge.ino`, `flash.ps1` | compiles with and without the flag; **needs on-hardware test** |
+| **Stop button + status LED** (BOOT button, **on by default**, `--no-safety` to remove) | `hardware/hid_bridge/hid_bridge.ino`, `flash.sh` | compiles with and without; **needs on-hardware test** |
 | **bplist fuzz + regression harness** (libFuzzer + portable repro) | `hardware/tests/fuzz/` | builds & runs under gcc; libFuzzer+ASan in CI |
 | **CI** (firmware compile, `go build`/`vet`/`test`, bplist fuzz) | `.github/workflows/fork-ci.yml` | YAML added |
-| **Single-client SoftAP hardening** (`--harden`, default off) | `netcfg.cpp`, `flash.sh`, `docs/hardening.md` | firmware compiles |
+| **Single-client SoftAP** (**on by default**, `--multi-client` to allow 4) | `netcfg.cpp`, `flash.sh`, `docs/hardening.md` | firmware compiles; **check phone re-join on hardware** |
 | **OLED status display** (`--display`, SSD1306 I2C via U8g2) | `hid_bridge.ino`, `docs/hardware-addons.md` | compiles; **needs the OLED wired** |
 | **Battery gauge** (`-DBATTERY_PIN`, on the OLED) | `hid_bridge.ino`, `docs/hardware-addons.md` | compiles; **needs a LiPo + divider** |
 | **BLE discovery boost** (short name in the primary advertisement + faster interval, for WinRT #114) | `ble_link.cpp` | compiles; **needs on-hardware test** |

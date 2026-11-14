@@ -7,6 +7,14 @@
 #pragma once
 #include "sdkconfig.h"
 
+// Build switch, here because this file reaches every source file. 0 (default): headless, the board is driven
+// only by the computer's CLI (BLE service ...0010, TCP 7202). The iOS app's side is not built in: no GATT service
+// ...0000, no app advertising or bonding, no Wi-Fi video (7200/7201), no OTA server (7300). 1: the app's side as it
+// was (flash.sh --app-link); builds, but nothing in this fork uses it.
+#ifndef APP_LINK
+#define APP_LINK 0
+#endif
+
 // Notify mbufs: every queued notify holds ~2-3 blocks until the controller takes it. 12 x 256 ran out
 // at ~300 kbps; 64 x 320 lets ~20 MTU-sized notifies wait in the host. ~22 KB internal RAM.
 #undef CONFIG_BT_NIMBLE_MSYS_1_BLOCK_COUNT

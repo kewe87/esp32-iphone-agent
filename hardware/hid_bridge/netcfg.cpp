@@ -202,7 +202,12 @@ String net_json(bool vtok) {
   bool sta = mode == "sta";
   String j = String("{\"mode\":\"") + mode + "\",\"ssid\":\"" + jsonEsc(sta ? staSsid : apSsid) + "\",\"pass\":\"" +
              jsonEsc(sta ? staPass : apPass) + "\",\"ip\":\"" + net_ip() + "\"";
+#if APP_LINK
   return j + (vtok ? ",\"vtok\":\"" + wv_token() + "\"}" : "}");
+#else
+  (void)vtok;  // headless: no Wi-Fi video or OTA server, so there is no token to hand out
+  return j + "}";
+#endif
 }
 
 const char *net_mode() {

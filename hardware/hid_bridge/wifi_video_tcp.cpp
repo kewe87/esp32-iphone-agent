@@ -19,7 +19,9 @@ const int SEND_TIMEOUT_MS = 2000;
 const int RECV_TIMEOUT_MS = 5000;
 
 static int listener = -1, client = -1;
-static SemaphoreHandle_t lock;              // client + writes (a record goes out whole)
+// client + writes (a record goes out whole). NULL until wv_begin(), which a headless build (APP_LINK 0) never
+// calls: then client stays -1 and authed false, so nothing below reaches the lock; the checks make sure of it.
+static SemaphoreHandle_t lock;
 static volatile uint32_t lastSeen;
 static volatile bool authed, resync, resumeAsked, audioWanted;
 static volatile uint32_t resumeTs;
@@ -150,6 +152,7 @@ bool wv_begin() {
 String wv_token() { return token; }
 
 bool wv_active() {
+  if (!lock) return false;  // never started (headless)
   bool on = authed && client >= 0 && millis() - lastSeen < PEER_TIMEOUT_MS;
   static bool was;  // log why the session stopped counting: a late "ka" sends the app's video over BLE
   if (was && !on) board_log("wv: inactive (%s, last ka %lu ms ago)", client < 0 ? "closed" : !authed ? "not authed" : "ka late",
@@ -168,6 +171,8 @@ bool wv_send(const uint8_t *chunk, size_t n) {
 }
 
 bool wv_take_resume(uint32_t *ts) {
+  *ts = 0;
+  if (!lock) return false;  // never started (headless)
   xSemaphoreTake(lock, portMAX_DELAY);
   bool asked = resumeAsked;
   *ts = resumeTs;

@@ -14,6 +14,8 @@
 #   --display     show status on a 128x64 SSD1306 I2C OLED (-DSTATUS_DISPLAY=1); see docs/hardware-addons.md
 #   --battery-pin N  show LiPo % on the display, read through a 2:1 divider on GPIO N (XIAO D0 = 1)
 #   --ap-tune     A/B build: hotspot on a 20 MHz channel with 300 TU beacons (more airtime for BLE)
+#   --app-link    build the iOS app's side back in (-DAPP_LINK=1: BLE service 0000, Wi-Fi video 7201, OTA 7300).
+#                 The default is headless: the board is driven by the esp32agent CLI only. Untested in this fork.
 # BLE host: h2zero NimBLE-Arduino (arduino-cli lib install "NimBLE-Arduino"); its buffer sizes live in
 # hid_bridge/nimble_cfg.h, force-included into every C/C++ file below.
 # A running bridge is a TinyUSB device, so it is first kicked into the ROM
@@ -40,12 +42,13 @@ for a in "$@"; do
     --build-only) BUILD_ONLY=1 ;;
     --ap-tune) DEFS+=" -DAP_TUNE=1" ;;
     --abs) DEFS+=" -DABS_POINTER=1" ;;
+    --app-link) DEFS+=" -DAPP_LINK=1" ;;
     --safety|--harden) ;;  # default now
     --no-safety) DEFS+=" -DSAFETY_CONTROLS=0" ;;
     --multi-client) DEFS+=" -DAP_MAX_CLIENTS=4" ;;
     --display) DEFS+=" -DSTATUS_DISPLAY=1" ;;
     --battery-pin) BAT_NEXT=1 ;;
-    --crash-test) DEFS+=" -DOTA_CRASH_TEST=1" ;;  # build only, then push it with ota_push.py
+    --crash-test) DEFS+=" -DOTA_CRASH_TEST=1" ;;  # test build for the OTA rollback path
     --small-gop) DEFS+=" -DGOP_CAP_KB=256" ;;  # test build: the GOP fills (freezes) within minutes
     *) PORT=$a ;;
   esac

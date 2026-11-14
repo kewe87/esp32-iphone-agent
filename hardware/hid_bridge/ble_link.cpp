@@ -38,6 +38,7 @@ const int VIDEO_CTRL_PKTS = 8;             // ACL packets video may have in the 
 const uint32_t CMD_ACTIVE_MS = 1000;       // ... i.e. for this long after a `cmd` write; otherwise all of them
 const int MBUF_DATA = MYNEWT_VAL(MSYS_1_BLOCK_SIZE) - 16;  // payload per block (16 B mbuf header)
 // Up to MAX_PEERS centrals at once: the phone's app, plus a computer (the esp32agent CLI, or a debug harness).
+// Headless (APP_LINK 0): computers only, and only the CLI's identity and service exist.
 const int MAX_PEERS = 2;
 const uint32_t PLAIN_GRACE_MS = 15000;     // a link neither encrypted (app) nor a CLI session by then is dropped
 // One legacy advertising set wears one identity at a time: the app's (public address, service 0000) or the CLI's
@@ -69,6 +70,7 @@ static uint32_t winStart, winBytes;  // touched by the video task only
 static volatile uint32_t kbps;
 static std::atomic<uint32_t> drops, replyDrops;
 static volatile uint32_t lastCmdMs;  // last `cmd` write: replies are expected, keep video's share small
+#if APP_LINK
 static volatile uint32_t appSeenMs;  // last command from the app that drives the phone
 // An app that only pings (every 2 s, in the background too) and logs is idle and lets the CLI in; its next real
 // command takes the board back (2026-10-21: the app in the background held the board for good).
@@ -81,6 +83,7 @@ static bool appWorks(const String &line) {
   return cmd != "ping" && !cmd.startsWith("log ") && cmd != "move 1 0" && cmd != "move -1 0" &&
          !cmd.startsWith("hear");  // sharing what it heard with the CLI doesn't take the phone from it
 }
+#endif
 
 #if DEBUG_SERIAL
 #define BLE_LOG(...) Serial.printf("ble: " __VA_ARGS__)
@@ -95,11 +98,13 @@ static uint32_t pairOpened;  // power-on, or the last unpair
 static NimBLEAddress known[8];  // bonds at boot plus those made in the window
 static int knownCount;
 
+#if APP_LINK
 static bool isKnown(const NimBLEAddress &a) {
   for (int i = 0; i < knownCount; i++)
     if (known[i] == a) return true;
   return false;
 }
+#endif
 
 // Commands and notifications need an encrypted (bonded) link: a stranger's plain link gets nothing.
 static bool encrypted(int h) {
@@ -183,6 +188,7 @@ class ServerCb : public NimBLEServerCallbacks {
   }
   void onAuthenticationComplete(NimBLEConnInfo &ci) override {
     logConn("security", ci);
+#if APP_LINK
     if (!ci.isEncrypted()) return;
     NimBLEAddress a = ci.getIdAddress();
     if (isKnown(a)) return;
@@ -190,6 +196,7 @@ class ServerCb : public NimBLEServerCallbacks {
     BLE_LOG("conn %u: new phone outside the pairing window, refused\n", ci.getConnHandle());
     NimBLEDevice::deleteBond(a);
     server->disconnect(ci.getConnHandle());
+#endif  // headless: nothing bonds, and an encrypted link counts for nothing (dropIdlePlainLinks)
   }
 };
 
@@ -197,18 +204,22 @@ class CharCb : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic *c, NimBLEConnInfo &ci) override {
     const NimBLEAttValue &raw = c->getValue();
     if (c == cliIn || c == cliInNR) { cli_on_frame(slotFor(ci.getConnHandle()), raw.data(), raw.length()); return; }
+#if APP_LINK
     String v(raw.c_str(), raw.length());
     if (!ci.isEncrypted()) return;
     if (c == netChar) { net_request(v); return; }
     v.trim();
     if (appWorks(v)) appSeenMs = millis() | 1;
     ble_push_cmd(FROM_APP, v.c_str(), v.length());
+#endif
   }
+#if APP_LINK
   void onRead(NimBLECharacteristic *c, NimBLEConnInfo &ci) override {
     if (c != netChar) return;
     String j = net_json();
     c->setValue((const uint8_t *)j.c_str(), j.length());
   }
+#endif
   void onSubscribe(NimBLECharacteristic *c, NimBLEConnInfo &ci, uint16_t sub) override {
     int i = indexOf(c), p = sub & 1 ? slotFor(ci.getConnHandle()) : slotOf(ci.getConnHandle());
     if (i >= 0 && p >= 0) subscribed[p][i] = sub & 1;
@@ -250,7 +261,7 @@ static bool notifyOne(int slot, int ch, const uint8_t *p, size_t n, uint32_t sta
   for (;;) {
     int h = peers[slot];
     // CLI frames are sealed (cli_link.cpp) and go to the CLI's own plain link; everything else needs encryption
-    if (h < 0 || !subscribed[slot][ch] || (ch != CH_CLI && !encrypted(h))) return false;
+    if (h < 0 || !chars[ch] || !subscribed[slot][ch] || (ch != CH_CLI && !encrypted(h))) return false;
     if (!(video && (ctrlPending > 0 || !ctrlRoom(n))) && os_msys_num_free() >= need) {
       os_mbuf *om = ble_hs_mbuf_from_flat(p, n);
       int rc = om ? ble_gatts_notify_custom(h, chars[ch]->getHandle(), om) : BLE_HS_ENOMEM;  // om consumed
@@ -291,7 +302,8 @@ static void dropIdlePlainLinks() {
   if (ble_pair_window_open()) return;
   for (int i = 0; i < MAX_PEERS; i++) {
     int h = peers[i];
-    if (h >= 0 && !encrypted(h) && !cli_known(i) && millis() - connAt[i] > PLAIN_GRACE_MS) {
+    // headless: there is no app, so link encryption earns a stranger nothing either
+    if (h >= 0 && !(APP_LINK && encrypted(h)) && !cli_known(i) && millis() - connAt[i] > PLAIN_GRACE_MS) {
       BLE_LOG("conn %d: plain and idle for %lu s, dropped\n", h, PLAIN_GRACE_MS / 1000);
       connAt[i] = millis();  // once
       server->disconnect(h);
@@ -338,14 +350,19 @@ static NimBLEAdvertisementData appAdv, cliAdv;
 static SemaphoreHandle_t advLock;
 static AdvId advNow = ADV_NONE;
 
+#if APP_LINK
 // The identity a link came in on: our own address on it is the CLI's random one, or the public one.
 static bool viaCli(int h) {
   ble_gap_conn_desc d;
   return h >= 0 && ble_gap_conn_find(h, &d) == 0 && d.our_ota_addr.type == BLE_ADDR_RANDOM;
 }
+#endif
 
 static AdvId wantedAdv() {
   if (peerCount() >= MAX_PEERS) return ADV_NONE;
+#if !APP_LINK
+  return ADV_CLI;  // headless: the CLI's identity all the time, while a slot is free
+#else
   bool app = false, cli = false;
   for (int i = 0; i < MAX_PEERS; i++)
     if (peers[i] >= 0) (viaCli(peers[i]) ? cli : app) = true;
@@ -353,6 +370,7 @@ static AdvId wantedAdv() {
   if (app) return ADV_CLI;  // the CLI still learns the app holds the board (owner app, busy)
   if (cli) return ADV_APP;  // the app can always come and take over
   return millis() % ADV_CYCLE_MS < ADV_CLI_MS ? ADV_CLI : ADV_APP;
+#endif
 }
 
 // Brings advertising to the identity wanted now; a connection ends it, so this also restarts it.
@@ -411,10 +429,15 @@ void ble_begin(const String &name) {
   NimBLEDevice::setMTU(517);
   NimBLEDevice::setPower(9);  // dBm: retain link margin during setup, including a board powered by a Mac.
   NimBLEDevice::setDefaultPhy(BLE_GAP_LE_PHY_1M_MASK, BLE_GAP_LE_PHY_1M_MASK);
+#if APP_LINK
   NimBLEDevice::setSecurityAuth(true, false, true);  // bonding, Just Works, LE Secure Connections
   NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
   NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
   NimBLEDevice::setSecurityRespKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
+#else
+  NimBLEDevice::setSecurityAuth(false, false, true);  // no bonds: the CLI's link is sealed in cli_link.cpp
+  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+#endif
 #if DEBUG_SERIAL
   NimBLEDevice::setCustomGapHandler(onGap);
 #endif
@@ -423,6 +446,7 @@ void ble_begin(const String &name) {
 
   server = NimBLEDevice::createServer();
   server->setCallbacks(new ServerCb());
+#if APP_LINK
   NimBLEService *svc = server->createService(UUID("0000"));
   NimBLECharacteristic *cmd = svc->createCharacteristic(UUID("0001"), NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR |
                                                                                    NIMBLE_PROPERTY::WRITE_ENC);
@@ -432,6 +456,7 @@ void ble_begin(const String &name) {
   chars[CH_VIDEO] = svc->createCharacteristic(UUID("0004"), NIMBLE_PROPERTY::NOTIFY);
   netChar = svc->createCharacteristic(UUID("0005"), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE |
                                                         NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC);
+#endif  // headless: chars[CH_REPLY/CH_STATUS/CH_VIDEO] and netChar stay NULL, every use below checks
   NimBLEService *cliSvc = server->createService(UUID("0010"));
   cliIn = cliSvc->createCharacteristic(UUID("0011"), NIMBLE_PROPERTY::WRITE, CMD_MAX + 64);
   // The same frames as write commands (no ATT response to wait for), for frames that fit the MTU: a CLI waiting
@@ -440,9 +465,12 @@ void ble_begin(const String &name) {
   chars[CH_CLI] = cliSvc->createCharacteristic(UUID("0012"), NIMBLE_PROPERTY::NOTIFY);
   cliIn->setCallbacks(&charCb);
   cliInNR->setCallbacks(&charCb);
+#if APP_LINK
   cmd->setCallbacks(&charCb);
   netChar->setCallbacks(&charCb);
-  for (auto *c : chars) c->setCallbacks(&charCb);
+#endif
+  for (auto *c : chars)
+    if (c) c->setCallbacks(&charCb);
   server->start();
 
   advLock = xSemaphoreCreateMutex();
@@ -458,6 +486,7 @@ void ble_begin(const String &name) {
 
 bool ble_connected() { return peerCount() > 0; }
 
+#if APP_LINK
 bool ble_app_connected() {
   for (int i = 0; i < MAX_PEERS; i++)
     if (encrypted(peers[i])) return true;
@@ -465,6 +494,10 @@ bool ble_app_connected() {
 }
 
 bool ble_app_active() { return appSeenMs && millis() - appSeenMs < APP_IDLE_MS && ble_app_connected(); }
+#else  // headless: there is no app, whatever a central does to its link
+bool ble_app_connected() { return false; }
+bool ble_app_active() { return false; }
+#endif
 
 void ble_push_cmd(char origin, const char *line, size_t n) {
   char buf[CMD_MAX] = {origin};
@@ -506,6 +539,7 @@ void ble_cli_status(const String &full, const String &compact) {
 }
 
 void ble_status(const String &json) {
+  if (!chars[CH_STATUS]) return;  // headless: no app status characteristic
   chars[CH_STATUS]->setValue((const uint8_t *)json.c_str(), json.length());  // also served on read
   if (!anySubscribed(CH_STATUS)) return;
   xSemaphoreTake(statusLock, portMAX_DELAY);
@@ -556,6 +590,7 @@ uint8_t ble_phy() {
 
 void ble_unpair() {
   for (int i = 0; i < 100 && ctrlPending > 0; i++) vTaskDelay(pdMS_TO_TICKS(10));  // let the `ok` go out
+  vTaskDelay(pdMS_TO_TICKS(150));  // ... and onto the air: a notify queued in the host goes down with the link
   NimBLEDevice::deleteAllBonds();  // unpairs each bond (also drops it from the controller's resolving list)
   ble_store_clear();               // and any CCCD/peer records left in NVS
   cli_forget_all();                // and paired computers

@@ -6,7 +6,11 @@ break it, and Windows/Linux need no pairing dialog. Instead the link is authenti
 application layer.
 
 ## Discovery
-The board advertises (legacy PDUs, connectable) under one of two identities at a time:
+A headless build (the default, `APP_LINK 0`) has only the CLI's identity and service: it advertises that one all
+the time while a connection slot is free, and nothing below about the app applies to it.
+
+A build with the app's side (`flash.sh --app-link`) advertises (legacy PDUs, connectable) under one of two
+identities at a time:
 - the app's: the board's public address, service `...0000` (docs/ble-protocol.md).
 - the CLI's: a random static address picked at every boot, service `...0010`, same name `ESP32 Agent XXXX`.
   No central can hold a bond for an address that changes every boot, so the OS never tries to encrypt.
@@ -35,7 +39,7 @@ cannot sit on one of the board's connection slots.
 - `board_id`: the board's 6-byte BT MAC. The CLI shows it as 12 hex digits (`device id`).
 - `client_id`: 16 random bytes made by the CLI once per install.
 - `K`: 32-byte key shared by one client and one board. The board keeps up to 4 (NVS, oldest replaced);
-  `unpair` from the app forgets them all.
+  `unpair` forgets them all (headless: from the CLI or USB serial; with the app's side: from the app).
 
 ## Frames
 `[type u8][body]`, one frame per write / notify (writes may be long writes; notifies are at most MTU-3 bytes).
@@ -126,8 +130,21 @@ unchanged and never sees a new error.
   waits 30 s before it tries again.
 - **When the app's link goes down** the CLI may connect and drive; it re-homes its pointer on every new session.
 - **Settings stay the app's.** `res fps txpower coex app log unpair` answer `err not available from the CLI`
-  (`net` is allowed: the Wi-Fi link needs it).
+  (`net` is allowed: the Wi-Fi link needs it). Only in a build with the app's side; see below.
 - **Video.** The CLI's video runs on its own task and buffers; it only runs while the CLI owns the board.
 - **Intents** stay in the app: what the CLI does is not recorded there.
+
+## Headless build (no app, the default)
+Built with `APP_LINK 0` the board has no app side at all: no service `...0000`, no bonding, no Wi-Fi video
+(7200/7201), no OTA server (7300; updates go over USB). The CLI never gets `err busy`, `owner` is `cli` or `none`,
+`busy` is 0, and `heard` answers `{"app":0,"lines":[]}` (`listen raw on` works). The settings are the CLI's:
+- `res W H`, `fps N`: the mirroring format, stored on the board; it applies to the next mirroring session.
+- `txpower 8-84` (0.25 dBm steps), `coex [bt|balance|wifi]`: radio A/B knobs, not stored; a reboot resets them.
+- `log TEXT`: writes a marker line into the board's log (`logs`) and to USB serial.
+- `app …`: `err no app: this firmware is driven by the CLI only`.
+- `unpair`: the board answers `<id> ok` on the session that asked, then forgets **every** paired computer (all
+  keys in NVS, and any BLE bond), drops all BLE and Wi-Fi links, and opens a new 3-minute pairing window. The
+  computer's stored key is now useless (`0xE0 "not paired"`): forget the board there too (`esp32agent unpair`)
+  and `pair` again within the window. Without `unpair`, the same reset is `<id> unpair` on USB serial.
 
 Test vectors: `cli/testdata/vectors.json` (checked by `hardware/tests` and `go test ./cli/...`).

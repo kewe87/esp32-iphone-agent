@@ -264,9 +264,13 @@ static void streamStep(Sink &s) {
   // A new transport, or the app lost chunks it can't get back: resend config + whole GOP. Not again while the
   // last resend is still going: a GOP can be MBs (the next IDR may be minutes away), and restarting it at every
   // request (the app asks every 2 s) kept the air full, so mirroring and BLE starved (2026-10-20 03:00 log).
+#if APP_LINK
   bool resyncAsked = s.who == FROM_APP && wv_take_resync();
   uint32_t resumeTs;
   bool resume = wifi && resyncAsked && wv_take_resume(&resumeTs) && resumeAt(s, resumeTs);
+#else  // headless: no app session to resync or resume (wv_begin() never ran)
+  const bool resyncAsked = false, resume = false;
+#endif
   // A new transport goes on in place: the app's one assembler takes both links, a new app session asks for the IDR
   // itself (`hello`), and chunks lost on the old link end in a resume (`hello … at`). Resending the GOP at every
   // Wi-Fi/BLE flip replayed minutes of old screens into the decoder, 18 times in 11 min (2026-11-06).

@@ -1,6 +1,7 @@
 // HID bridge: an ESP32-S3 (XIAO, 8 MB PSRAM) plugged into the iPhone. It is the phone's
 // USB mouse + keyboard, an AirPlay screen-mirroring receiver, and a BLE peripheral for the
 // iOS app on the same phone. It holds no logic; the app decides. Protocol: docs/ble-protocol.md.
+// Headless build (APP_LINK 0, the default, nimble_cfg.h): no app; the computer's CLI decides (docs/cli-protocol.md).
 //
 // HID commands (unchanged from the old TCP protocol, the board answers "ok" or "err <why>"):
 //   ping | pace | home | move <dx> <dy> [speed] | press | release | click
@@ -180,7 +181,11 @@ static void display_poll() {  // ~2 Hz from loop()
   char l1[32], l2[32], l3[32], l4[32];
   snprintf(l1, sizeof l1, "%s %s", BOARD_NAME_TEXT, FW_VERSION);
   snprintf(l2, sizeof l2, "net %s %s", net_mode(), net_ip().c_str());
+#if APP_LINK
   snprintf(l3, sizeof l3, "peers %d  ble %d", net_peers(), (int)ble_app_connected());
+#else
+  snprintf(l3, sizeof l3, "peers %d  cli %d", net_peers(), (int)(cli_slot() >= 0));
+#endif
 #if SAFETY_CONTROLS
   const char *state = g_stopped ? "STOPPED" : "running";
 #else
@@ -372,10 +377,20 @@ String board(const String &line, const String &id, char who) {
     video_stream(arg == "on", who);
     return "ok";
   }
+#if APP_LINK
   // The CLI must not change what the app relies on: the mirroring format, the radio, the pairing.
   if (who == FROM_CLI && (cmd == "app" || cmd == "log" || cmd == "unpair" || cmd == "res" || cmd == "fps" ||
                           cmd == "txpower" || cmd == "coex"))
     return "err not available from the CLI";
+#else
+  // Headless: the settings are the CLI's (res, fps, txpower, coex, unpair below). There is no app to relay to.
+  if (cmd == "app") return "err no app: this firmware is driven by the CLI only";
+  if (cmd == "log") {  // a marker in the board's log (`logs`) and on USB serial
+    if (!arg.length()) return "err usage: log TEXT";
+    board_log("log %s", arg.c_str());
+    return "ok";
+  }
+#endif
   if (cmd == "net" && who == FROM_CLI) {  // the board's Wi-Fi for the CLI's link (docs/cli-protocol.md, "Wi-Fi link")
     if (arg.length()) {
       if (!arg.startsWith("{")) return "err usage: net [{\"mode\":\"ap\"} | {\"mode\":\"sta\",\"ssid\":...,\"pass\":...}]";
@@ -384,6 +399,7 @@ String board(const String &line, const String &id, char who) {
     }
     return "ok " + net_json(false);
   }
+#if APP_LINK
   if (cmd == "app" || cmd == "log") {  // debug relay: Mac -> app ("app run ...") and app -> Mac ("log ...")
     ble_reply(cmd + " " + arg);         // every peer sees it; each side ignores lines it doesn't handle
     if (cmd == "log") Serial.println("log " + arg);  // and a Mac on USB serial
@@ -400,6 +416,7 @@ String board(const String &line, const String &id, char who) {
     if (heardRing()) heard_add(heardRing(), millis(), arg.c_str(), arg.length());
     return "ok";
   }
+#endif  // headless: nobody shares transcripts, `heard` answers {"app":0,"lines":[]}; `listen raw on` still works
   if (cmd == "heard") {
     static char out[HEARD_LINES * 64 + 64];
     int room = (int)cli_mtu() - 3 - CLI_OVERHEAD - 1 - 16;  // ATT, seal, kind byte, "<id> ok "
@@ -444,7 +461,10 @@ String board(const String &line, const String &id, char who) {
     return String("ok ") + net_coex_mode();
   }
   if (cmd == "unpair") {
-    ble_reply(id + " ok");  // answer before the link goes down
+    // Answer before the link goes down, and to whoever asked: the CLI's `ok` goes out sealed with the session
+    // that ble_unpair() then ends. It forgets every paired computer (and bond), drops all links and opens a new
+    // pairing window: the computer has to `pair` again within 3 minutes.
+    ble_reply(id + " ok", who);
     ble_unpair();
     return "";
   }
@@ -509,10 +529,12 @@ String statusJson(bool full, char who) {
 void statusTask(void *) {
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(1000));
+#if APP_LINK
     if (!ble_connected()) continue;
     String s = statusJson(true, FROM_APP);
     if (s.length() > ble_mtu() - 3u) s = statusJson(false, FROM_APP);
     ble_status(s);
+#endif  // headless: the CLI's status only, also to a session on Wi-Fi whose BLE link is gone
     if (cli_slot() >= 0) ble_cli_status(statusJson(true, FROM_CLI), statusJson(false, FROM_CLI));
   }
 }
@@ -521,6 +543,9 @@ void statusTask(void *) {
 // evidence: the AirPlay log, and board_log (the video link's switches and resumes, which stayed in the 8 KB RAM log
 // and were gone before anyone looked, 2026-11-06). At most 16 a second; the rest are counted and reported later.
 void relayLine(const char *msg) {
+#if !APP_LINK
+  (void)msg;  // headless: no app to relay to; the lines stay in the RAM log (`logs`)
+#else
   static uint32_t windowStart, sent, skipped;
   static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
   uint32_t now = millis();
@@ -534,6 +559,7 @@ void relayLine(const char *msg) {
   String line = String("blog ") + now + " " + msg;
   if (dropped) line += String(" (+") + dropped + " skipped)";
   ble_reply(line);
+#endif
 }
 
 // AirPlay log lines: to USB serial, the RAM log and the app.
@@ -555,7 +581,7 @@ void startAirplay() {
   cfg.max_fps = cfg_fps();
   cfg.on_config = video_on_config;
   cfg.on_au = video_on_au;
-  cfg.on_audio = wv_audio;
+  cfg.on_audio = wv_audio;  // also headless: the CLI's raw audio (`listen raw on`) goes through it
   cfg.log = logLine;
   cfg.on_lost = video_on_lost;
   if (!airplay_start(&cfg)) board_log("airplay: start failed");
@@ -588,8 +614,10 @@ void setup() {
 
   net_begin();
   if (!video_begin()) board_log("video: no PSRAM for the GOP buffer");
+#if APP_LINK  // headless: ports 7200/7201 (app video) and 7300 (OTA) stay closed; updates go over USB
   if (!wv_begin()) board_log("video: Wi-Fi video channel failed to start");
   if (!ota_begin()) board_log("ota: failed to start");
+#endif
   arb_init(&arb);
   cli_begin();
   if (!cli_tcp_begin()) board_log("cli: Wi-Fi link failed to start");
@@ -614,6 +642,7 @@ void loop() {
   net_poll();
   bool cli = cli_slot() >= 0;
   // A gesture cut off mid-way must not leave the button held (long press); only the side that went holds it.
+#if APP_LINK
   bool app = ble_app_connected(), appActive = ble_app_active();
   if (linked && !app) {
     if (arb_gone(&arb, ARB_APP)) mouse.release(MOUSE_LEFT);
@@ -621,10 +650,12 @@ void loop() {
     video_stream(false, FROM_APP);
     appHears = false;  // until the app says so again
   }
+#endif
   if (cliLinked && !cli) {
     if (arb_gone(&arb, ARB_CLI)) mouse.release(MOUSE_LEFT);
     video_stream(false, FROM_CLI);
   }
+#if APP_LINK
   // The app wins: a CLI session up alongside it stops at once and is dropped shortly after, once its status
   // (owner app, busy 1) and the `err busy` replies to anything it sent are out, so it doesn't load the radio.
   static uint32_t cliDropAt = 0;
@@ -642,6 +673,9 @@ void loop() {
     cliDropAt = 0;
   }
   linked = app;
+#else
+  linked = cli;  // headless: a CLI session is what proves a fresh image (ota_confirm below)
+#endif
   cliLinked = cli;
   // A freshly updated image is kept once it has run a while or the app got through; a crash or watchdog
   // reset before that makes the bootloader go back to the previous one.
@@ -668,7 +702,7 @@ void loop() {
     serialLine = "";
     line.trim();
     if (line.startsWith("0 net ")) { net_request(line.substring(6)); Serial.println("0 ok"); return; }
-    if (line == "0 netinfo") { Serial.println("0 " + net_json(true)); return; }  // what the app reads over BLE (incl. vtok)
+    if (line == "0 netinfo") { Serial.println("0 " + net_json(true)); return; }  // what the app reads over BLE (incl. vtok; headless: none)
     if (line == "0 status") { Serial.println("0 " + statusJson(true, FROM_APP)); return; }
     int sp = line.indexOf(' ');
     String id = sp < 0 ? line : line.substring(0, sp);

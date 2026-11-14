@@ -7,6 +7,10 @@
 #include <esp_netif.h>
 #include <esp_coexist.h>
 #include <esp_wifi.h>
+
+#ifndef AP_MAX_CLIENTS
+#define AP_MAX_CLIENTS 4  // hardening (flash --harden sets 1): max stations allowed on the SoftAP
+#endif
 #include "wifi_video.h"
 
 #if STA_FROM_SECRETS
@@ -89,7 +93,7 @@ static void startWifi() {
     WiFi.begin(staSsid.c_str(), staPass.c_str());
   } else {
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(apSsid.c_str(), apPass.c_str(), 6, 0, 4);
+    WiFi.softAP(apSsid.c_str(), apPass.c_str(), 6, 0, AP_MAX_CLIENTS);
     // The phone is centimetres away and powers the board: low TX power cuts the current peaks that made the
     // phone drop its USB power (the board then came back with reset reason "power-on").
     WiFi.setTxPower(WIFI_POWER_5dBm);

@@ -375,9 +375,18 @@ static void setUpAdvertising(const std::string &name) {
   for (auto *d : {&appAdv, &cliAdv}) d->setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
   appAdv.setCompleteServices(NimBLEUUID(UUID("0000")));
   cliAdv.setCompleteServices(NimBLEUUID(UUID("0010")));
+  // Discovery: also put a short name in the PRIMARY advertisement next to the 128-bit service UUID
+  // (they fit the 31-byte packet: 18 + 3 + up to 9 bytes). A single scan report then identifies the
+  // board, which WinRT/Windows needs when it drops the UUID from the scan response (issue #114). The
+  // full name still rides in the scan response below.
+  std::string shortName = name.substr(0, 7);
+  for (auto *d : {&appAdv, &cliAdv}) d->setShortName(shortName);
+  NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+  adv->setMinInterval(0x30);  // ~30 ms: advertise often so the board is found quickly
+  adv->setMaxInterval(0x60);  // ~60 ms
   NimBLEAdvertisementData scan;
   scan.setName(name);
-  NimBLEDevice::getAdvertising()->setScanResponseData(scan);
+  adv->setScanResponseData(scan);
   uint8_t a[6];
   esp_fill_random(a, sizeof a);
   a[5] |= 0xC0;  // random static: top two bits set (NimBLE addresses are little-endian)

@@ -31,6 +31,5 @@
         "mcp"
       ]
     }
-  },
-  "icon": "./ios/IPhoneAgent/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+  }
 }

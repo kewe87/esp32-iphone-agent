@@ -21,10 +21,6 @@ hardware/hid_bridge/build/
 # Host test output
 hardware/tests/test
 hardware/tests/test.dSYM/
-hardware/tools/out/
-
-# Firmware release packages (hardware/tools/fw_release.py)
-hardware/dist/
 
 # Cloudflare CLI local cache (account id/name)
 .cloudflare/

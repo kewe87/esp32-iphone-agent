@@ -37,6 +37,16 @@ jobs:
           build "-DSAFETY_CONTROLS=0 -DAP_MAX_CLIENTS=4"
           build "-DSTATUS_DISPLAY=1 -DBATTERY_PIN=1"
 
+  host-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host tests (bplist, GOP buffer, CLI protocol, Bonjour TXT, …)
+        run: |
+          sudo apt-get update && sudo apt-get install -y libmbedtls-dev
+          make -C hardware/tests
+
   cli:
     runs-on: ubuntu-latest
     defaults:

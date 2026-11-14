@@ -1,5 +1,10 @@
 # Changelog
 
+> Upstream history (ESP32 iPhone Agent by Henry Yuan), kept for reference. This fork removed the iPhone app,
+> `prompts/`, `server/` and the app docs, so "App" entries and paths such as `ios/`, `prompts/`, `server/` or
+> `docs/siri-ai-app-intents.md` below refer to the upstream repository (tag `pre-headless` in this fork).
+> Fork changes: [ROADMAP-FORK.md](ROADMAP-FORK.md).
+
 Full changelog with board firmware and every channel: [handsy.tech/docs/changelog](https://handsy.tech/docs/changelog).
 
 ## App 1.0.6 (TestFlight)

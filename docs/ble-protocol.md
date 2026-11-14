@@ -96,8 +96,7 @@ background, and carries the video again whenever no Wi-Fi session is up.
 - The board keeps the last 1024 chunks (PSRAM) for resends. The app orders datagrams by seq, nacks a gap at
   once and again after 80 ms, and after 250 ms skips it and sends `resync` (the assembler waits for the IDR).
 - `vtok` is random per boot and only in the encrypted `net` read, so only a bonded app can watch the screen.
-- USB serial (Mac tests): `0 netinfo` prints the `net` JSON, `0 status` the full status;
-  `hardware/tools/board_test.py udp --serial <port>` benches the channel.
+- USB serial: `0 netinfo` prints the `net` JSON, `0 status` the full status.
 
 ## Wi-Fi video (TCP, current firmware)
 Port 7201, one app at a time. App → board text lines: `hello <vtok>` or `hello <vtok> at <ms>`, then `ka` every

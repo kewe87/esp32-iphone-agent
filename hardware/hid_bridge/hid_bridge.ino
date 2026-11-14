@@ -149,6 +149,58 @@ static void safety_poll() {  // call from loop(): debounced toggle on each press
 }
 #endif
 
+// ---- Optional 128x64 SSD1306 status display + battery gauge (flash --display) ---------------------
+// Shows name/firmware, net mode + IP, peers, and RUNNING/STOPPED on a cheap I2C OLED. Off by default;
+// needs the OLED wired to the board's I2C pins. Battery needs BATTERY_PIN. See docs/hardware-addons.md.
+#ifndef STATUS_DISPLAY
+#define STATUS_DISPLAY 0
+#endif
+#if STATUS_DISPLAY
+#include <Wire.h>
+#include <U8g2lib.h>
+static U8G2_SSD1306_128X64_NONAME_F_HW_I2C g_oled(U8G2_R0, U8X8_PIN_NONE);
+#ifdef BATTERY_PIN
+#ifndef BATTERY_DIVIDER
+#define BATTERY_DIVIDER 2.0f  // LiPo-to-ADC divider ratio (two equal resistors = 2.0)
+#endif
+static int battery_pct() {
+  float v = analogReadMilliVolts(BATTERY_PIN) / 1000.0f * BATTERY_DIVIDER;  // battery volts
+  int p = (int)((v - 3.3f) / (4.2f - 3.3f) * 100.0f);  // rough LiPo curve: 3.3 V = 0%, 4.2 V = 100%
+  return p < 0 ? 0 : (p > 100 ? 100 : p);
+}
+#endif
+static void display_begin() {
+  Wire.begin();
+  g_oled.begin();
+}
+static void display_poll() {  // ~2 Hz from loop()
+  static uint32_t last = 0;
+  if (millis() - last < 500) return;
+  last = millis();
+  char l1[32], l2[32], l3[32], l4[32];
+  snprintf(l1, sizeof l1, "%s %s", BOARD_NAME_TEXT, FW_VERSION);
+  snprintf(l2, sizeof l2, "net %s %s", net_mode(), net_ip().c_str());
+  snprintf(l3, sizeof l3, "peers %d  ble %d", net_peers(), (int)ble_app_connected());
+#if SAFETY_CONTROLS
+  const char *state = g_stopped ? "STOPPED" : "running";
+#else
+  const char *state = "running";
+#endif
+#ifdef BATTERY_PIN
+  snprintf(l4, sizeof l4, "%s  bat %d%%", state, battery_pct());
+#else
+  snprintf(l4, sizeof l4, "%s", state);
+#endif
+  g_oled.clearBuffer();
+  g_oled.setFont(u8g2_font_6x12_tr);
+  g_oled.drawStr(0, 12, l1);
+  g_oled.drawStr(0, 28, l2);
+  g_oled.drawStr(0, 44, l3);
+  g_oled.drawStr(0, 60, l4);
+  g_oled.sendBuffer();
+}
+#endif
+
 String run(const String &line) {
   int sp = line.indexOf(' ');
   String cmd = sp < 0 ? line : line.substring(0, sp);
@@ -530,6 +582,9 @@ void setup() {
 #if SAFETY_CONTROLS
   safety_begin();
 #endif
+#if STATUS_DISPLAY
+  display_begin();
+#endif
 
   net_begin();
   if (!video_begin()) board_log("video: no PSRAM for the GOP buffer");
@@ -552,6 +607,9 @@ void loop() {
   esp_task_wdt_reset();
 #if SAFETY_CONTROLS
   safety_poll();
+#endif
+#if STATUS_DISPLAY
+  display_poll();
 #endif
   net_poll();
   bool cli = cli_slot() >= 0;

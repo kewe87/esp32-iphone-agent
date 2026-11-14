@@ -9,6 +9,7 @@
 #   --safety      a physical stop button (BOOT) + status LED that can suppress all HID output (off by default)
 #   --harden      only one station (the phone) may join the SoftAP (-DAP_MAX_CLIENTS=1); see docs/hardening.md
 #   --display     show status on a 128x64 SSD1306 I2C OLED (-DSTATUS_DISPLAY=1); see docs/hardware-addons.md
+#   --battery-pin N  show LiPo % on the display, read through a 2:1 divider on GPIO N (XIAO D0 = 1)
 #   --ap-tune     A/B build: hotspot on a 20 MHz channel with 300 TU beacons (more airtime for BLE)
 # BLE host: h2zero NimBLE-Arduino (arduino-cli lib install "NimBLE-Arduino"); its buffer sizes live in
 # hid_bridge/nimble_cfg.h, force-included into every C/C++ file below.
@@ -18,8 +19,12 @@ set -euo pipefail
 cd "$(dirname "$0")"
 FQBN="esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=cdc,FlashSize=8M,PSRAM=opi,PartitionScheme=default_8MB"
 ports() { for p in /dev/cu.usbmodem* /dev/ttyACM*; do [[ -e $p ]] && echo "$p"; done; return 0; }
-PORT="" DEFS="" BUILD_ONLY=0 NAME_NEXT=0
+PORT="" DEFS="" BUILD_ONLY=0 NAME_NEXT=0 BAT_NEXT=0
 for a in "$@"; do
+  if (( BAT_NEXT )); then
+    [[ $a =~ ^[0-9]+$ ]] || { echo "--battery-pin takes a GPIO number"; exit 1; }
+    DEFS+=" -DBATTERY_PIN=$a"; BAT_NEXT=0; continue
+  fi
   if (( NAME_NEXT )); then
     [[ $a =~ ^[A-Za-z0-9]+$ ]] || { echo "--name takes one word of letters and digits"; exit 1; }
     DEFS+=" -DBOARD_NAME=$a"; NAME_NEXT=0; continue
@@ -35,6 +40,7 @@ for a in "$@"; do
     --safety) DEFS+=" -DSAFETY_CONTROLS=1" ;;
     --harden) DEFS+=" -DAP_MAX_CLIENTS=1" ;;
     --display) DEFS+=" -DSTATUS_DISPLAY=1" ;;
+    --battery-pin) BAT_NEXT=1 ;;
     --crash-test) DEFS+=" -DOTA_CRASH_TEST=1" ;;  # build only, then push it with ota_push.py
     --small-gop) DEFS+=" -DGOP_CAP_KB=256" ;;  # test build: the GOP fills (freezes) within minutes
     *) PORT=$a ;;

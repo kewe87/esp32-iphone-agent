@@ -120,7 +120,9 @@ static bool process(ap_conn *c) {
     *end = 0;  // the head becomes a C string; body follows at head_len
     const char *cl = strcasestr((char *)c->buf, "\r\nContent-Length:");
     size_t body_len = cl ? strtoul(cl + 17, NULL, 10) : 0;
-    if (head_len + body_len > MAX_REQUEST) return false;
+    // Overflow-safe bound: a huge Content-Length must not wrap head_len + body_len
+    // (size_t is 32-bit here) below MAX_REQUEST and slip past the length checks below.
+    if (body_len > MAX_REQUEST || head_len > MAX_REQUEST - body_len) return false;
     if (c->len < head_len + body_len) {
       *end = '\r';  // wait for the rest of the body
       return true;

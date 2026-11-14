@@ -1,5 +1,6 @@
 // Minimal binary plist codec, see bplist.h.
 #include "bplist.h"
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,8 +25,11 @@ int bp_open(bp_reader *r, const void *data, size_t len) {
   r->top = be(t + 16, 8);
   r->table = be(t + 24, 8);
   if (r->off_size < 1 || r->off_size > 8 || r->ref_size < 1 || r->ref_size > 8) return -1;
-  if (r->top >= r->count || r->table < 8 || r->count > len) return -1;
-  if (r->table + r->count * r->off_size > len - 32) return -1;
+  // top/count/table are attacker-controlled 64-bit trailer fields; bound them without
+  // overflowing (len >= 40 here). The offset table lies between the header and the trailer,
+  // and its `count` entries of off_size bytes must fit before the 32-byte trailer.
+  if (r->top >= r->count || r->table < 8 || r->table > len - 32) return -1;
+  if (r->count > (len - 32 - r->table) / r->off_size) return -1;
   return (int)r->top;
 }
 
@@ -71,8 +75,12 @@ int bp_type(const bp_reader *r, int ref) {
 static bool container(const bp_reader *r, int ref, int want, uint64_t *n, size_t *body) {
   size_t pos = obj_at(r, ref);
   if (!pos || header(r, pos, n, body) != want) return false;
-  uint64_t refs = want == 0xD ? *n * 2 : *n;
-  return *body + refs * r->ref_size <= r->table;
+  uint64_t refs = *n;  // *n is an attacker-controlled 64-bit count/length
+  if (want == 0xD) { if (refs > UINT64_MAX / 2) return false; refs *= 2; }
+  // refs entries of ref_size bytes must fit between *body and the offset table,
+  // checked without overflowing *body + refs * ref_size.
+  if (*body > r->table) return false;
+  return refs <= (r->table - *body) / r->ref_size;
 }
 
 int bp_count(const bp_reader *r, int ref) {
@@ -138,7 +146,7 @@ bool bp_get_real(const bp_reader *r, int ref, double *out) {
 bool bp_get_data(const bp_reader *r, int ref, const uint8_t **out, size_t *len) {
   size_t pos = obj_at(r, ref), body;
   uint64_t n;
-  if (!pos || header(r, pos, &n, &body) != 0x4 || body + n > r->table) return false;
+  if (!pos || header(r, pos, &n, &body) != 0x4 || body > r->table || n > r->table - body) return false;
   *out = r->buf + body;
   *len = (size_t)n;
   return true;
@@ -162,12 +170,12 @@ bool bp_get_string(const bp_reader *r, int ref, char *out, size_t cap) {
   if (!pos || !cap) return false;
   int kind = header(r, pos, &n, &body);
   if (kind == 0x5) {
-    if (body + n > r->table || n >= cap) return false;
+    if (body > r->table || n > r->table - body || n >= cap) return false;
     memcpy(out, r->buf + body, (size_t)n);
     out[n] = 0;
     return true;
   }
-  if (kind != 0x6 || body + n * 2 > r->table) return false;
+  if (kind != 0x6 || body > r->table || n > (r->table - body) / 2) return false;
   for (uint64_t i = 0; i < n; i++) {
     uint32_t c = (uint32_t)be(r->buf + body + i * 2, 2);
     if (c >= 0xD800 && c < 0xDC00 && i + 1 < n) {  // surrogate pair

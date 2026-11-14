@@ -12,8 +12,12 @@
 #include <stdint.h>
 #include <string.h>
 
+// Objects may reference each other (and themselves), so a plain depth cap still allows an
+// exponential walk (an array of N self-references visits N^depth nodes). Cap the total work per input.
+static long g_budget;
+
 static void walk(const bp_reader *r, int ref, int depth) {
-  if (depth > 32) return;  // defuse reference cycles
+  if (depth > 32 || --g_budget < 0) return;  // defuse reference cycles and fan-out blow-up
   switch (bp_type(r, ref)) {
     case BP_UINT: { uint64_t u; bp_get_uint(r, ref, &u); break; }
     case BP_BOOL: { bool b; bp_get_bool(r, ref, &b); break; }
@@ -38,6 +42,7 @@ static void walk(const bp_reader *r, int ref, int depth) {
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   bp_reader r;
   int top = bp_open(&r, data, size);
+  g_budget = 100000;
   if (top >= 0) walk(&r, top, 0);
   return 0;
 }

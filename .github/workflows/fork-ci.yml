@@ -13,6 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install arduino-cli + ESP32 core + NimBLE
         run: |
+          mkdir -p "$HOME/.local/bin"
           curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR="$HOME/.local/bin" sh
           export PATH="$HOME/.local/bin:$PATH"
           arduino-cli config init
@@ -62,4 +63,4 @@ jobs:
           clang -fsanitize=fuzzer,address,undefined -I../../hid_bridge/src/bplist \
             -o bplist_fuzz bplist_fuzz.c ../../hid_bridge/src/bplist/bplist.c
           mkdir -p corpus
-          ./bplist_fuzz -max_total_time=60 -print_final_stats=1 corpus
+          ./bplist_fuzz -max_total_time=60 -timeout=10 -print_final_stats=1 corpus

@@ -243,7 +243,11 @@ func (c *Conn) Send(ctx context.Context, line string) (string, error) {
 		c.mu.Lock()
 		delete(c.pending, id)
 		c.mu.Unlock()
-		return "", fmt.Errorf("%s: no reply from the board", strings.Fields(line)[0])
+		name := line
+		if f := strings.Fields(line); len(f) > 0 {
+			name = f[0]
+		}
+		return "", fmt.Errorf("%s: no reply from the board", name)
 	case r, ok := <-ch:
 		if !ok {
 			return "", proto.ErrSession

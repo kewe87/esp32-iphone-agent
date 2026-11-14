@@ -80,10 +80,13 @@ func NewDecoder(ffmpeg string, onFrame func(Frame)) (*Decoder, error) {
 				onFrame(Frame{Img: img, TS: ts})
 			}
 		}
-		d.err = d.cmd.Wait()
+		werr := d.cmd.Wait()
 		if s := d.stderr.String(); s != "" {
-			d.err = fmt.Errorf("ffmpeg: %s", s)
+			werr = fmt.Errorf("ffmpeg: %s", s)
 		}
+		d.mu.Lock()
+		d.err = werr
+		d.mu.Unlock()
 		close(d.done)
 	}()
 	return d, nil
@@ -134,7 +137,7 @@ func (d *Decoder) Write(au AU) bool {
 
 // Done is closed when ffmpeg exits; Err says why.
 func (d *Decoder) Done() <-chan struct{} { return d.done }
-func (d *Decoder) Err() error            { return d.err }
+func (d *Decoder) Err() error            { d.mu.Lock(); defer d.mu.Unlock(); return d.err }
 
 func (d *Decoder) Close() {
 	defer func() { recover() }() // queue already closed

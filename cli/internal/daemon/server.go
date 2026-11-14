@@ -149,7 +149,7 @@ func (s *Server) handle(nc net.Conn) {
 		return
 	}
 	started := time.Now()
-	resp := s.Do(ctx, req)
+	resp := s.safeDo(ctx, req)
 	if Debug { // command names and outcomes only: no typed text, screenshots or keys
 		log.Printf("debug: %s device=%q -> %s %s (%s)", req.Cmd, req.Device, resp.Status, resp.Error, time.Since(started).Round(time.Millisecond))
 	}
@@ -157,6 +157,18 @@ func (s *Server) handle(nc net.Conn) {
 	if req.Cmd == "stop" {
 		s.Stop()
 	}
+}
+
+// safeDo runs Do but turns a panic in any handler into an error response, so one malformed
+// request can't crash the whole daemon (and every other board session with it).
+func (s *Server) safeDo(ctx context.Context, req Request) (resp Response) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("recovered from panic handling %q: %v", req.Cmd, r)
+			resp = fail(fmt.Errorf("internal error handling %q", req.Cmd))
+		}
+	}()
+	return s.Do(ctx, req)
 }
 
 // Do runs one request.

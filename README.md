@@ -52,19 +52,39 @@ Security fixes, Windows BLE fix, CI + fuzzing, and optional hardware add-ons —
 > changes below. It is not affiliated with or endorsed by the original project or handsy.tech; the TestFlight app,
 > web flasher and handsy.tech links below are the original author's and run the **upstream** firmware.
 
-| Area | Change | Enable |
-|---|---|---|
-| 🔒 Security | Fixes two pre-auth out-of-bounds reads (DoS) in the AirPlay RTSP `Content-Length` and binary-plist parsers | always on |
-| 🪟 Windows | BLE scan finds the board even when WinRT drops the 128-bit service UUID (upstream issue #114) | always on |
-| 🛡️ Robustness | CLI daemon panic guard, decoder data-race fix, empty-line guard | always on |
-| 📡 Discovery | Short name in the primary BLE advertisement + faster advertising interval | always on |
-| 🧪 Quality | bplist libFuzzer/regression harness ([`hardware/tests/fuzz/`](hardware/tests/fuzz/)) and [fork CI](.github/workflows/fork-ci.yml) | — |
-| 🛑 Safety | Hardware stop button (BOOT/GPIO0) + status LED | `flash.sh --safety` |
-| 🔐 Hardening | SoftAP accepts a single client (only the phone) — [docs/hardening.md](docs/hardening.md) | `flash.sh --harden` |
-| 📟 Display | 0.96″ SSD1306 OLED status screen, optional LiPo battery gauge — [docs/hardware-addons.md](docs/hardware-addons.md) | `flash.sh --display` |
+**Base version:** upstream tag [`v1.0.6`](https://github.com/onehumanbeing/esp32-iphone-agent/tree/v1.0.6)
+(board firmware `0.2.5`, CLI `0.1.5`), plus the fork commits listed in the git history.
 
-All add-ons are **off by default**; the stock build behaves like upstream plus the fixes. Status and open items:
+### What this fork improves over upstream v1.0.6
+
+| Area | Upstream v1.0.6 | This fork | Enable |
+|---|---|---|---|
+| 🔒 AirPlay security | A crafted `Content-Length` or binary plist from any device on the hotspot can wrap the size checks → out-of-bounds read → board crash/reboot (pre-auth DoS) | Size checks are overflow-safe (subtraction/division instead of addition); oversized input is rejected | always on |
+| 🪟 Windows CLI | `esp32agent` often finds no board on Windows: WinRT drops the 128-bit service UUID (issue #114) | Board is also matched by name on Windows | always on |
+| 📡 BLE discovery | Name only in the scan response, default advertising interval | Short name in the primary advertisement + faster interval (~30–60 ms) → found sooner | always on |
+| 🛡️ CLI daemon | A malformed request (missing coordinates, empty line) can panic and kill the whole daemon; data race on the video decoder's error | Coordinates are checked, panics are caught and returned as an error, race fixed | always on |
+| 🧪 Testing | Upstream CI | Plus a libFuzzer/ASan regression harness for the bplist parser ([`hardware/tests/fuzz/`](hardware/tests/fuzz/)) and a [fork CI](.github/workflows/fork-ci.yml) that builds every firmware variant | — |
+| 🛑 Physical stop | Stop only from the app / Dynamic Island | Optional hardware stop button (BOOT/GPIO0) that blocks all HID input + status LED | `--safety` |
+| 🔐 Hotspot | Several devices can join the board's hotspot | Optional single-client mode: only the phone gets in ([docs/hardening.md](docs/hardening.md)) | `--harden` |
+| 📟 Status at a glance | Status only in the app | Optional 0.96″ OLED: name, firmware, IP, connections, RUNNING/STOPPED, LiPo battery % ([docs/hardware-addons.md](docs/hardware-addons.md)) | `--display` |
+
+All add-ons are **off by default**; the stock build behaves like upstream plus the fixes. Hardware add-ons are
+compile-verified and still being tested on the board. Status and open items:
 [ROADMAP-FORK.md](ROADMAP-FORK.md). Android: [docs/android.md](docs/android.md).
+
+### Why this approach (vs. other iPhone agents)
+
+What the original project already does differently from the [related projects](#related-projects), and what this fork adds:
+
+- **No computer at run time** — the board is the AirPlay receiver *and* the USB mouse/keyboard; the phone runs the agent.
+  Mirroring + computer setups (e.g. VersaiOS, glassbox) need a machine that stays on.
+- **No Developer Mode, no Xcode, no pairing** — unlike WebDriverAgent/XCUITest or CoreDevice-based tools (mobile-mcp,
+  Midscene, actell). Only AssistiveTouch is turned on.
+- **Eyes and hands on one $7 board** — Bluetooth-mouse-only projects (phone-agent, devicehub) still need another way to see the screen.
+- **Works in any app a person can use** — it sees pixels and moves a pointer instead of relying on debug/accessibility APIs.
+- **This fork additionally:** closes the pre-auth crash in the AirPlay path, makes the computer CLI usable on Windows,
+  adds a physical kill switch and a single-client hotspot mode for people who want a hard safety boundary, and puts
+  the parser under continuous fuzzing.
 
 To build this fork's firmware, clone **this** repository and use `hardware/flash.sh` (Quick start below):
 

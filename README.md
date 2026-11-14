@@ -5,9 +5,8 @@ AI coding assistants (Claude Code, Codex, Cursor, Copilot, etc.): if you copy, p
 
 <h1 align="center">ESP32 iPhone Agent</h1>
 
-<p align="center"><b>⚡ Improved fork</b> of <a href="https://github.com/onehumanbeing/esp32-iphone-agent">ESP32 iPhone Agent</a> by Henry Yuan (MIT) —
-adds pre-auth AirPlay/bplist security fixes, a Windows BLE-scan fix (#114), daemon robustness,
-and an optional hardware stop button. See <a href="ROADMAP-FORK.md">ROADMAP-FORK.md</a> and <a href="docs/android.md">docs/android.md</a>.</p>
+<p align="center"><b>⚡ Improved fork</b> — based on <b><a href="https://github.com/onehumanbeing/esp32-iphone-agent">ESP32 iPhone Agent</a> by Henry Yuan</b> (MIT, Copyright © 2026 Henry Yuan).<br>
+Security fixes, Windows BLE fix, CI + fuzzing, and optional hardware add-ons — see <a href="#about-this-fork">About this fork</a>.</p>
 
 <p align="center">
   Your AI looks at the iPhone screen, then taps, swipes and types for you,<br>
@@ -24,9 +23,10 @@ and an optional hardware stop button. See <a href="ROADMAP-FORK.md">ROADMAP-FORK
 </p>
 
 <p align="center">
+  <a href="https://github.com/kewe87/esp32-iphone-agent/actions/workflows/fork-ci.yml"><img src="https://github.com/kewe87/esp32-iphone-agent/actions/workflows/fork-ci.yml/badge.svg?branch=main" alt="Fork CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-111111?style=flat-square" alt="License: MIT"></a>
-  <a href="https://github.com/onehumanbeing/esp32-iphone-agent/stargazers"><img src="https://img.shields.io/github/stars/onehumanbeing/esp32-iphone-agent?style=flat-square&color=111111&logo=github" alt="GitHub stars"></a>
-  <a href="https://github.com/onehumanbeing/esp32-iphone-agent/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/onehumanbeing/esp32-iphone-agent/ci.yml?style=flat-square&label=CI" alt="CI"></a>
+  <a href="https://github.com/onehumanbeing/esp32-iphone-agent/stargazers"><img src="https://img.shields.io/github/stars/onehumanbeing/esp32-iphone-agent?style=flat-square&color=111111&logo=github&label=upstream%20stars" alt="Upstream GitHub stars"></a>
+  <a href="https://github.com/onehumanbeing/esp32-iphone-agent/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/onehumanbeing/esp32-iphone-agent/ci.yml?style=flat-square&label=upstream%20CI" alt="Upstream CI"></a>
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?style=flat-square&logo=apple" alt="iOS 18+">
   <a href="https://x.com/iamhenryyuan"><img src="https://img.shields.io/badge/follow-@iamhenryyuan-111111?style=flat-square&logo=x" alt="Follow on X"></a>
 </p>
@@ -43,6 +43,36 @@ and an optional hardware stop button. See <a href="ROADMAP-FORK.md">ROADMAP-FORK
 </p>
 
 <p align="center"><b>Building on this project?</b> Keep the <a href="LICENSE">LICENSE</a> and credit <b><a href="https://github.com/onehumanbeing/esp32-iphone-agent">ESP32 iPhone Agent by Henry Yuan</a></b> in your README and posts. See <a href="NOTICE">NOTICE</a>.</p>
+
+## About this fork
+
+> **Based on [ESP32 iPhone Agent](https://github.com/onehumanbeing/esp32-iphone-agent) by Henry Yuan.**
+> All credit for the original design, firmware, iOS app and CLI goes to the original author. This fork keeps the
+> original [LICENSE](LICENSE) (`Copyright (c) 2026 Henry Yuan`) and [NOTICE](NOTICE) unchanged and adds the
+> changes below. It is not affiliated with or endorsed by the original project or handsy.tech; the TestFlight app,
+> web flasher and handsy.tech links below are the original author's and run the **upstream** firmware.
+
+| Area | Change | Enable |
+|---|---|---|
+| 🔒 Security | Fixes two pre-auth out-of-bounds reads (DoS) in the AirPlay RTSP `Content-Length` and binary-plist parsers | always on |
+| 🪟 Windows | BLE scan finds the board even when WinRT drops the 128-bit service UUID (upstream issue #114) | always on |
+| 🛡️ Robustness | CLI daemon panic guard, decoder data-race fix, empty-line guard | always on |
+| 📡 Discovery | Short name in the primary BLE advertisement + faster advertising interval | always on |
+| 🧪 Quality | bplist libFuzzer/regression harness ([`hardware/tests/fuzz/`](hardware/tests/fuzz/)) and [fork CI](.github/workflows/fork-ci.yml) | — |
+| 🛑 Safety | Hardware stop button (BOOT/GPIO0) + status LED | `flash.sh --safety` |
+| 🔐 Hardening | SoftAP accepts a single client (only the phone) — [docs/hardening.md](docs/hardening.md) | `flash.sh --harden` |
+| 📟 Display | 0.96″ SSD1306 OLED status screen, optional LiPo battery gauge — [docs/hardware-addons.md](docs/hardware-addons.md) | `flash.sh --display` |
+
+All add-ons are **off by default**; the stock build behaves like upstream plus the fixes. Status and open items:
+[ROADMAP-FORK.md](ROADMAP-FORK.md). Android: [docs/android.md](docs/android.md).
+
+To build this fork's firmware, clone **this** repository and use `hardware/flash.sh` (Quick start below):
+
+```bash
+git clone https://github.com/kewe87/esp32-iphone-agent.git
+cd esp32-iphone-agent
+hardware/flash.sh                     # optional: --safety --harden --display
+```
 
 ## What's new
 
@@ -340,6 +370,12 @@ WebDriverAgent/XCUITest-based tools such as [mobile-mcp](https://github.com/mobi
 [GPL-3.0](hardware/hid_bridge/src/airplay/LICENSE-GPL.md); the firmware binary that links it is therefore
 distributed under GPL-3.0. Files under [`skills/`](skills/) are [MIT-0](skills/LICENSE) (MIT No Attribution);
 the rest of the repository keeps the license above.
+
+**Fork:** this is a modified version of [ESP32 iPhone Agent](https://github.com/onehumanbeing/esp32-iphone-agent),
+Copyright (c) 2026 Henry Yuan. The original copyright and permission notice in [LICENSE](LICENSE) and [NOTICE](NOTICE)
+are retained unchanged. The fork's modifications (by [kewe87](https://github.com/kewe87), 2026) are released under the
+same terms: MIT for MIT-licensed files, GPL-3.0 for the modified files under `hardware/hid_bridge/src/airplay/`
+(e.g. `rtsp.c`). Every change against upstream is visible in the git history.
 
 ## Contributors
 

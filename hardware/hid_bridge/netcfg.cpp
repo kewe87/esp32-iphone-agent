@@ -9,7 +9,7 @@
 #include <esp_wifi.h>
 
 #ifndef AP_MAX_CLIENTS
-#define AP_MAX_CLIENTS 4  // hardening (flash --harden sets 1): max stations allowed on the SoftAP
+#define AP_MAX_CLIENTS 1  // fork default: only the phone may join the SoftAP (flash --multi-client sets 4)
 #endif
 #include "wifi_video.h"
 

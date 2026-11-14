@@ -13,14 +13,15 @@ those services.
 ## Recommended settings
 - **Keep the SoftAP password strong.** The firmware generates random AP credentials; don't replace
   them with something weak, and don't share them.
-- **Single-client AP (`--harden`).** Build with `flash.sh --harden` / `flash.ps1 -Harden`
-  (`-DAP_MAX_CLIENTS=1`) so only one station — your phone — can associate at a time. Note: this also
-  blocks a second Mac/Linux debug client from joining the AP, so leave it off while using the debug
-  harness.
+- **Single-client AP (default in this fork).** Only one station — your phone — can associate at a
+  time (`AP_MAX_CLIENTS=1`). This also stops a computer from joining the board's hotspot next to the
+  phone: the CLI then stays on Bluetooth, or use `esp32agent net join` for your home Wi-Fi. Build with
+  `flash.sh --multi-client` (up to 4 stations) only when you need that, e.g. for the debug harness.
 - **Prefer the SoftAP over station mode** in untrusted environments: on your home LAN (station mode)
   the services are reachable by everything on that network.
-- **Enable the stop control (`--safety`).** A physical button that instantly suppresses all HID
-  output — keep it within reach while an agent is driving the phone.
+- **Stop button (default in this fork).** Press the board's BOOT button to suppress all HID output
+  (LED solid = stopped, slow blink = running); press again to resume. Keep it within reach while an
+  agent drives the phone. `flash.sh --no-safety` removes it.
 - **Use a local or trusted vision model.** Screenshots of the phone go to whatever model endpoint
   you configure; a local model (Ollama / vLLM) keeps them on your own machine.
 - **Physical custody.** Mirroring stops when the phone locks, and iOS hides passcode / Apple Pay /

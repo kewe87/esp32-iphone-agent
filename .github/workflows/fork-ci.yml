@@ -22,7 +22,7 @@ jobs:
           arduino-cli core install esp32:esp32@3.3.12
           arduino-cli lib install "NimBLE-Arduino@2.5.1"
           arduino-cli lib install "U8g2"
-      - name: Compile firmware (stock + --safety --harden)
+      - name: Compile firmware (default, opt-outs, display + battery)
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           FQBN="esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=cdc,FlashSize=8M,PSRAM=opi,PartitionScheme=default_8MB"
@@ -34,8 +34,8 @@ jobs:
               hardware/hid_bridge
           }
           build ""
-          build "-DSAFETY_CONTROLS=1 -DAP_MAX_CLIENTS=1"
-          build "-DSTATUS_DISPLAY=1"
+          build "-DSAFETY_CONTROLS=0 -DAP_MAX_CLIENTS=4"
+          build "-DSTATUS_DISPLAY=1 -DBATTERY_PIN=1"
 
   cli:
     runs-on: ubuntu-latest

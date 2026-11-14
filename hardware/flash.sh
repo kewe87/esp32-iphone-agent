@@ -6,8 +6,11 @@
 #   --build-only  compile only (prints flash/RAM usage)
 #   --name NAME   the board's name in Screen Mirroring and Bluetooth (one word; default ESP32 Agent)
 #   --abs         absolute mouse instead of the relative one (needs AssistiveTouch; the app skips calibration)
-#   --safety      a physical stop button (BOOT) + status LED that can suppress all HID output (off by default)
-#   --harden      only one station (the phone) may join the SoftAP (-DAP_MAX_CLIENTS=1); see docs/hardening.md
+# Safety is on by default in this fork: BOOT button = stop (suppresses all HID output) + status LED,
+# and only one station (the phone) may join the SoftAP. See docs/hardening.md. To opt out:
+#   --no-safety     build without the stop button / status LED
+#   --multi-client  let up to 4 stations join the SoftAP (e.g. a computer next to the phone, debug harness)
+#   (--safety / --harden are still accepted; they are the default now)
 #   --display     show status on a 128x64 SSD1306 I2C OLED (-DSTATUS_DISPLAY=1); see docs/hardware-addons.md
 #   --battery-pin N  show LiPo % on the display, read through a 2:1 divider on GPIO N (XIAO D0 = 1)
 #   --ap-tune     A/B build: hotspot on a 20 MHz channel with 300 TU beacons (more airtime for BLE)
@@ -37,8 +40,9 @@ for a in "$@"; do
     --build-only) BUILD_ONLY=1 ;;
     --ap-tune) DEFS+=" -DAP_TUNE=1" ;;
     --abs) DEFS+=" -DABS_POINTER=1" ;;
-    --safety) DEFS+=" -DSAFETY_CONTROLS=1" ;;
-    --harden) DEFS+=" -DAP_MAX_CLIENTS=1" ;;
+    --safety|--harden) ;;  # default now
+    --no-safety) DEFS+=" -DSAFETY_CONTROLS=0" ;;
+    --multi-client) DEFS+=" -DAP_MAX_CLIENTS=4" ;;
     --display) DEFS+=" -DSTATUS_DISPLAY=1" ;;
     --battery-pin) BAT_NEXT=1 ;;
     --crash-test) DEFS+=" -DOTA_CRASH_TEST=1" ;;  # build only, then push it with ota_push.py

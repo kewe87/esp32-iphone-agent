@@ -187,7 +187,43 @@ Picking a board, cables and adapters, or stuck during setup: [setup guide](https
 | **Vision model** | Any OpenAI-compatible chat API that accepts images: a cloud API or your own server. |
 | **Mac with Xcode** | Only to flash the board and build the app once. Not needed at run time. With the [TestFlight](https://testflight.apple.com/join/1xQHgJcA) app, Xcode is not needed for the app. |
 
-\* Affiliate link. As an Amazon Associate I earn from qualifying purchases.
+\* Affiliate link (upstream author's). As an Amazon Associate I earn from qualifying purchases.
+
+### Hardware for this fork: basic or extended
+
+Everyone uses the **same board**: the plain **Seeed Studio XIAO ESP32S3** (8 MB PSRAM, *not* Sense, *not* Plus).
+The extras are optional and use their own pins, so the **basic setup needs nothing beyond the board and a cable**,
+and the stock firmware works whether or not the extras are attached. Add parts later at any time and reflash with
+the matching flag.
+
+**Basic (enough for everything the app does)**
+
+| Part | Notes | Approx. price |
+|---|---|---|
+| Seeed Studio XIAO ESP32S3 (plain) | Native USB-C, 8 MB PSRAM. Classic ESP32 boards (e.g. ESP32-WROOM-32 with a CH340 USB chip) **do not work**: no native USB, so they can't act as a mouse/keyboard | ~7–12 € |
+| Short USB-C ↔ USB-C **data** cable | Charge-only cables don't work. Lightning iPhones: Lightning to USB Camera Adapter | ~5–10 € |
+| Case (optional) | A XIAO ESP32S3 case with the USB-C end open (e.g. Etsy/Printables) | ~5–10 € |
+
+Flash: `hardware/flash.sh` (no flags).
+
+**Extended (stop button, display, battery)**
+
+| Add-on | Part to buy | Wiring (XIAO) | Flag |
+|---|---|---|---|
+| 🛑 Stop button + status LED | **Nothing**: uses the board's own BOOT button and user LED | — | `--safety` |
+| 📟 Status display | 0.96″ OLED 128×64, **SSD1306, I²C** (4 pins: VCC GND SCL SDA; not the SPI version), ~3–6 € | VCC→3V3, GND→GND, SDA→D4 (GPIO5), SCL→D5 (GPIO6) | `--display` |
+| 🔋 Battery | 3.7 V 1S LiPo, ~500 mAh (e.g. 503035), ~5–8 € | Solder to the BAT+/BAT− pads on the back; the XIAO charges it over USB-C | — |
+| 🔋 Battery % on the display | 2 × 100 kΩ resistors | BAT+ → 100 kΩ → D0 (GPIO1) → 100 kΩ → GND | `--display --battery-pin 1` |
+| 🔐 Single-client hotspot | Nothing (software only) | — | `--harden` |
+
+Example — everything on: `hardware/flash.sh --safety --harden --display --battery-pin 1`.
+
+Notes:
+- The battery is **not needed** for normal use: the iPhone powers the board over USB-C. It is only for running the
+  board unplugged (e.g. testing from a computer over BLE) or to keep it alive while swapping cables.
+- Watch the LiPo polarity (red = BAT+) before soldering; a reversed cell can destroy the board.
+- With display or battery, pick a case with an OLED window or battery bay, or print one; a plain XIAO case won't fit them.
+- Details and calibration: [docs/hardware-addons.md](docs/hardware-addons.md).
 
 ## Quick start
 

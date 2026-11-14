@@ -1,5 +1,7 @@
 # ESP32 iPhone Agent — hardened fork
 
+**English** · [Deutsch](README.de.md)
+
 > **Based on [ESP32 iPhone Agent](https://github.com/onehumanbeing/esp32-iphone-agent) by Henry Yuan** (MIT,
 > Copyright © 2026 Henry Yuan). The idea, the firmware, the iOS app and the CLI are his work. This fork only adds
 > security fixes, safer defaults, tests and optional hardware. For how the project works, the app and the full
@@ -11,8 +13,31 @@
 [![Upstream](https://img.shields.io/badge/upstream-onehumanbeing%2Fesp32--iphone--agent-111111?style=flat-square&logo=github)](https://github.com/onehumanbeing/esp32-iphone-agent)
 
 **In one sentence:** an ESP32-S3 board plugged into the iPhone acts as AirPlay receiver (eyes) and USB
-mouse/keyboard (hands), so an AI can use the phone — no jailbreak, no computer at run time
-([how it works, upstream](https://github.com/onehumanbeing/esp32-iphone-agent#how-it-works)).
+mouse/keyboard (hands), so an AI can use the phone — no jailbreak, no computer at run time.
+
+## How it works
+
+```
+iPhone ──Screen Mirroring (Wi-Fi)──▶ Board: AirPlay receiver ──Wi-Fi──▶ App on the same iPhone
+   ▲                                  own hotspot                       image → AI model → action
+   └──────── USB mouse + keyboard ◀──────── commands over Bluetooth ◀─────────────┘
+```
+
+1. **Eyes:** the board opens its own Wi-Fi hotspot. The iPhone mirrors its screen to it over AirPlay; the board
+   forwards the video to the app.
+2. **Brain:** the app sends screenshots to a vision model (cloud API or your own server) and gets back what to do
+   next: tap, swipe, type …
+3. **Hands:** the app tells the board over Bluetooth what to do. To the iPhone the board is an ordinary USB mouse
+   and keyboard; with AssistiveTouch the pointer becomes a finger.
+
+**User interface:** there is no web interface. You control it through
+- the **iPhone app "ESP32 Agent"** ([TestFlight](https://testflight.apple.com/join/1xQHgJcA)) — type a task, press
+  Start, watch (the app is the original author's; languages: English and Chinese),
+- **or from a computer** with the `esp32agent` command line, which is also an MCP server for AI assistants such as
+  Claude Code ([cli/README.md](cli/README.md)),
+- and on the board itself: **BOOT button = stop**, LED for status, optionally a small OLED display.
+
+More detail: [how it works (upstream)](https://github.com/onehumanbeing/esp32-iphone-agent#how-it-works).
 
 This fork is not affiliated with or endorsed by the original project or handsy.tech. The TestFlight app and the
 browser flasher are the original author's; the browser flasher installs the **upstream** firmware, so build from

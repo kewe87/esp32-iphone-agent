@@ -1,5 +1,7 @@
 # Android (and iPhone) from one board
 
+**English** · [Deutsch](android.de.md)
+
 **Short answer:** this upstream project is iPhone-only — there is no `android/` code here.
 But the same board works for Android through a sister project, and only the "eyes" differ.
 

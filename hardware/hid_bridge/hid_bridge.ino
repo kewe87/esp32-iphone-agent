@@ -116,6 +116,39 @@ bool usbReady() {
 static uint32_t holdUntil;
 const long HOLD_MAX_MS = 60000;
 
+// ---- Optional physical safety controls (flash.sh/flash.ps1 --safety) -------------------------------
+// A momentary button toggles a "stopped" state that suppresses all HID output (the agent can move and
+// type nothing), and an LED shows it: 0.5 Hz heartbeat = running, solid = stopped. Off by default so the
+// stock image is unchanged; pins are overridable for non-XIAO boards. Needs on-hardware validation.
+#ifndef SAFETY_CONTROLS
+#define SAFETY_CONTROLS 0
+#endif
+#if SAFETY_CONTROLS
+#ifndef STOP_BTN_PIN
+#define STOP_BTN_PIN 0        // BOOT button on XIAO ESP32-S3 / DevKitC (free as an input after boot)
+#endif
+#ifndef STATUS_LED_PIN
+#define STATUS_LED_PIN 21     // XIAO ESP32-S3 user LED
+#endif
+#ifndef STATUS_LED_ACTIVE_LOW
+#define STATUS_LED_ACTIVE_LOW 1
+#endif
+static volatile bool g_stopped = false;
+static void safety_begin() {
+  pinMode(STOP_BTN_PIN, INPUT_PULLUP);
+  pinMode(STATUS_LED_PIN, OUTPUT);
+}
+static void safety_poll() {  // call from loop(): debounced toggle on each press, plus the status LED
+  static uint32_t lastEdge = 0;
+  static bool prev = false;
+  bool pressed = digitalRead(STOP_BTN_PIN) == LOW;
+  if (pressed && !prev && millis() - lastEdge > 150) { g_stopped = !g_stopped; lastEdge = millis(); }
+  prev = pressed;
+  bool on = g_stopped || ((millis() / 1000) & 1);  // solid when stopped, 0.5 Hz heartbeat otherwise
+  digitalWrite(STATUS_LED_PIN, (on ^ STATUS_LED_ACTIVE_LOW) ? HIGH : LOW);
+}
+#endif
+
 String run(const String &line) {
   int sp = line.indexOf(' ');
   String cmd = sp < 0 ? line : line.substring(0, sp);
@@ -131,6 +164,9 @@ String run(const String &line) {
   }
 #endif
   if (cmd == "pace") return "ok " + String(PACE_VERSION);  // how moves are paced: the app recalibrates on a change
+#if SAFETY_CONTROLS
+  if (g_stopped) return "err stopped (safety button)";  // ping/pace still answer, all input is suppressed
+#endif
   if (!usbReady()) return "err phone usb asleep (unlock the phone)";
   if (cmd == "reset") {
     if (arg.length()) return "err usage: reset";
@@ -491,6 +527,9 @@ void setup() {
   esp_task_wdt_reconfigure(&wdt);
   esp_task_wdt_add(NULL);
   readCrash();
+#if SAFETY_CONTROLS
+  safety_begin();
+#endif
 
   net_begin();
   if (!video_begin()) board_log("video: no PSRAM for the GOP buffer");
@@ -511,6 +550,9 @@ void setup() {
 void loop() {
   static bool linked = false, cliLinked = false;
   esp_task_wdt_reset();
+#if SAFETY_CONTROLS
+  safety_poll();
+#endif
   net_poll();
   bool cli = cli_slot() >= 0;
   // A gesture cut off mid-way must not leave the button held (long press); only the side that went holds it.
